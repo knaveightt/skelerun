@@ -7,28 +7,29 @@
 - This is the rest stop "in between" dungeon runs.
 - Use this area to refine your weapons and equipment.
 **** Areas
-***** Blacksmith - Take Materials and Craft Weapons
+***** Workshops
+****** Blacksmith - Take Materials and Craft Weapons
 - Level up the blacksmith with higher-tier materials
 - Weapons increase attack power
 - At a certain level, unlock the ability to refine (add rank to weapons)
-***** Armoror - Take Materials and Craft Armor
+****** Armoror - Take Materials and Craft Armor
 - Level up the blacksmith with higher-tier materials
 - Armor gives greater general damage reduction
 - At a certain level, unlock the ability to refine (add rank to armor)
-***** Healer - Take Materials and increases vitality (more health)
+****** Healer - Take Materials and increases vitality (more health)
 - Level up the healer with higher-tier materials
-***** Wizard - Takes Higher-tier materials and Unlocks Talismans
+****** Wizard - Takes Higher-tier materials and Unlocks Talismans
 - Talismans give you passive bonus resistances to different damage types
-***** Sage - Take Materials to Learn Damage Types / Resistances / Weeknesses of Monsters 
+****** Sage - Take Materials to Learn Damage Types / Resistances / Weeknesses of Monsters 
 - Higher level monster knowledge requires higher level materials
-***** Mystic - Takes Boss Materials and Unlock Runes
+****** Mystic - Takes Boss Materials and Unlock Runes
 - Unlock more runs with higher-tier materials
 - Runes produce special offensive or defensive passive effects
-**** Hiring Stand
-***** Spend Premium Materials to "hire" them for a single dungeon run
-***** Time-based hiring
-**** Dungeon Passage
-***** Choose the dungeon you want to run
+***** Hiring Stand
+****** Spend Premium Materials to "hire" them for a single dungeon run
+****** Time-based hiring
+***** Dungeon Passage
+****** Choose the dungeon you want to run
 **** Materials
 ***** Piece Materials
 ****** T Piece "Tin"

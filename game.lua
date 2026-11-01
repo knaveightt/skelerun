@@ -14,14 +14,15 @@ local enemies = {
  {name='KEEP WRAITH', hp=10, rate=8, push=.12, kind='wraith'},
  {name='THE IRON WARDEN', hp=14, rate=7.5, push=.13, kind='warden'}
 }
-function Game.new(random)
+function Game.new(random,resources)
  local self=setmetatable({},Game)
  self.random=random or math.random
  self.board={} for y=1,20 do self.board[y]={} end
  self.bag={} self.queue={} self.status='playing' self.position=.56
  self.enemyIndex=1 self.enemyHP=enemies[1].hp self.attack=0 self.travel=1.5
  self.lines=0 self.score=0 self.kills=0 self.combo=-1 self.gravity=0 self.lockTime=0
- self.resources={Tin=0,Iron=0,Copper=0,Orichalcum=0,Platinum=0}
+ self.resources=resources or {Tin=0,Iron=0,Copper=0,Orichalcum=0,Platinum=0}
+ self.loot={Tin=0,Iron=0,Copper=0,Orichalcum=0,Platinum=0}
  self.events={} self.time=0 self.held=nil self.holdUsed=false self:fillQueue() self:spawn()
  return self
 end
@@ -96,6 +97,7 @@ function Game:clearRows()
     blocks[kind]=blocks[kind]+1
     local resource=Game.resourceForPiece[kind]
     self.resources[resource]=self.resources[resource]+10
+    self.loot[resource]=self.loot[resource]+10
    end
    clearedRows[#clearedRows+1]=blocks
    table.remove(self.board,y) table.insert(self.board,1,{}) count=count+1

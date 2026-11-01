@@ -1,6 +1,8 @@
 local Game=require('game')
+local Session=require('session')
 local W,H=500,800
-local game,fonts,canvas
+local game,fonts,canvas,session
+local cellMessage,saveError
 local paused=false
 local t=0 local particles={} local notices={} local shake=0 local hitFlash=0 local clearFlash=0
 local repeatKey,repeatTime,repeatStarted=nil,0,false
@@ -26,8 +28,11 @@ local function tone(freq,duration,slide)
   d:setSample(i,((phase%1)<.5 and 1 or -1)*.065*(1-u/duration)^2)
  end return love.audio.newSource(d,'static')
 end
-local function restart()
- game=Game.new() paused=false particles={} notices={} shake=0 hitFlash=0 clearFlash=0 repeatKey=nil
+local function startRun()
+ game=session:startRun()
+ if not game then return end
+ cellMessage=nil
+ paused=false particles={} notices={} shake=0 hitFlash=0 clearFlash=0 repeatKey=nil
 end
 function love.load()
  love.graphics.setDefaultFilter('nearest','nearest')
@@ -40,7 +45,11 @@ function love.load()
   sounds.hit=tone(95,.22,-100) sounds.kill=tone(650,.3,900)
   sounds.won=tone(780,.7,500) sounds.lost=tone(180,.7,-120)
  end)
- restart()
+ local saved=Session.decode(love.filesystem.read('progress.dat'))
+ session=Session.new(saved,function(data)
+  local ok=love.filesystem.write('progress.dat',data)
+  saveError=not ok and 'Could not save progress to disk.' or nil
+ end)
 end
 local function burst(x,y,c,n)
  for _=1,n do particles[#particles+1]={x=x,y=y,vx=math.random(-80,80),vy=math.random(-95,20),life=.6+math.random()*.4,c=c} end
@@ -57,7 +66,7 @@ local function event(e)
 end
 function love.update(dt)
  t=t+dt
- if not paused then
+ if session.scene=='run' and not paused then
   game:update(dt,love.keyboard.isDown('down','s'))
   if game.status=='playing' and repeatKey then
    repeatTime=repeatTime+dt
@@ -67,17 +76,31 @@ function love.update(dt)
     game:move(repeatKey=='left' and -1 or 1,0) delay=.055
    end
   end
-  for _,e in ipairs(game.events) do event(e) end game.events={}
+  for _,e in ipairs(game.events) do
+   event(e)
+   if e.kind=='clear' then session:save() end
+  end
+  game.events={}
+  if game.status~='playing' then session:returnToCell() repeatKey=nil end
  end
  shake=math.max(0,shake-dt*20) hitFlash=math.max(0,hitFlash-dt) clearFlash=math.max(0,clearFlash-dt)
  for i=#particles,1,-1 do local p=particles[i] p.life=p.life-dt p.x=p.x+p.vx*dt p.y=p.y+p.vy*dt p.vy=p.vy+160*dt if p.life<=0 then table.remove(particles,i) end end
  for i=#notices,1,-1 do notices[i].life=notices[i].life-dt if notices[i].life<=0 then table.remove(notices,i) end end
 end
+local function unlockBlacksmith()
+ local unlocked,message=session:unlockBlacksmith()
+ cellMessage=message
+ if unlocked then play('kill') else play('hold') end
+end
 function love.keypressed(key)
  if key=='m' then muted=not muted return end
+ if session.scene=='cell' then
+  if key=='return' or key=='space' then startRun()
+  elseif key=='b' then unlockBlacksmith() end
+  return
+ end
  if key=='escape' or key=='p' then if game.status=='playing' then paused=not paused repeatKey=nil end return end
- if key=='r' then restart() return end
- if game.status~='playing' then if key=='return' or key=='space' then restart() end return end
+ if key=='r' then session:returnToCell() paused=false repeatKey=nil return end
  if paused then return end
  if key=='left' or key=='a' or key=='right' or key=='d' then
   repeatKey=(key=='left' or key=='a') and 'left' or 'right' repeatTime=0 repeatStarted=false game:move(repeatKey=='left' and -1 or 1,0)
@@ -89,7 +112,7 @@ end
 function love.keyreleased(key)
  if (repeatKey=='left' and (key=='left' or key=='a')) or (repeatKey=='right' and (key=='right' or key=='d')) then repeatKey=nil end
 end
-function love.focus(f) if not f and game and game.status=='playing' then paused=true repeatKey=nil end end
+function love.focus(f) if not f and session and session.scene=='run' and game.status=='playing' then paused=true repeatKey=nil end end
 local function torch(x,y)
  rect(x-3,y+6,6,17,{.29,.19,.15}) rect(x-5,y+4,10,4,'edge')
  local flick=math.floor(math.sin(t*13+x)*2)
@@ -212,18 +235,106 @@ local function sidebar()
  if game.position<.25 then text('DANGER',377,741,10,'red',107,'center') end
 end
 local function overlay()
- if not paused and game.status=='playing' then return end
+ if not paused then return end
  rect(0,0,W,H,'bg',.85)
  panel(51,262,398,250)
- local won=game.status=='won' local lost=game.status=='lost'
- text(won and 'KEEP CLEARED' or lost and 'RUN ENDED' or 'PAUSED',65,286,26,won and 'gold' or lost and 'red' or 'text',370,'center')
- text(won and 'The Iron Warden falls. Dawn awaits.' or lost and game.reason or 'Take a breath. The dungeon can wait.',73,336,12,'dim',354,'center')
+ text('PAUSED',65,286,26,'text',370,'center')
+ text('Take a breath. The dungeon can wait.',73,336,12,'dim',354,'center')
  text(game.lines..' LINES   /   '..game.kills..' SLAIN   /   '..game.score..' POINTS',65,376,12,'text',370,'center')
- text(paused and '[ P / ESC ]  CONTINUE' or '[ ENTER ]  RUN AGAIN',65,431,14,'gold',370,'center')
- text(paused and 'R to restart  /  M to toggle sound' or 'Every descent is another chance.',65,472,10,'dim',370,'center')
+ text('[ P / ESC ]  CONTINUE',65,431,14,'gold',370,'center')
+ text('R to return to cell  /  M to toggle sound',65,472,10,'dim',370,'center')
 end
-function love.draw()
- love.graphics.setCanvas(canvas) love.graphics.clear(C.bg)
+local function drawCell()
+ text('SKELERUN',16,12,26,'gold') text('THE SUNKEN KEEP',277,17,12,'dim',207,'right')
+ text('YOUR CELL',16,62,20,'text') text('A little shelter beneath the keep.',16,91,12,'dim')
+ panel(16,120,468,278)
+ love.graphics.setScissor(18,122,464,274)
+ rect(18,122,464,274,{.09,.10,.14})
+ for row=0,6 do for col=-1,8 do
+  local x=col*64+(row%2)*32
+  rect(x,124+row*31,62,29,{.14,.155,.19})
+  rect(x+5,127+row*31,50,2,{.18,.19,.23})
+ end end
+ -- A barred window, moonlight, and a worn sleeping cot.
+ rect(63,148,68,77,'edge') rect(68,153,58,67,'ink')
+ rect(74,158,46,56,{.12,.18,.28}) rect(102,166,9,12,{.67,.75,.75})
+ for i=0,3 do rect(76+i*12,153,4,67,'edge') end
+ rect(68,179,58,4,'edge')
+ rect(65,333,98,13,{.30,.21,.19}) rect(67,345,6,17,'edge') rect(152,345,6,17,'edge')
+ rect(67,324,93,12,{.45,.36,.32}) rect(76,320,31,7,{.68,.63,.49})
+ rect(108,325,49,8,{.35,.42,.44})
+ -- The blocked workshop becomes a warm forge when restored.
+ local open=session.blacksmithUnlocked
+ rect(254,181,125,163,{.09,.095,.13})
+ rect(250,178,133,9,'edge') rect(250,187,9,158,'edge') rect(374,187,9,158,'edge')
+ rect(272,205,84,60,'stone') rect(280,212,68,53,'ink')
+ if open then
+  rect(281,234,66,31,C.L,.18)
+  for i=0,5 do rect(285+i*10,242+math.floor(math.sin(t*9+i)*4),7,20,'L') rect(287+i*10,250,3,12,'gold') end
+ else
+  rect(280,259,67,5,'dim')
+ end
+ rect(279,291,58,8,'dim') rect(290,299,34,9,'edge') rect(299,307,15,17,'dim') rect(288,324,37,7,'edge')
+ rect(326,282,5,12,{.49,.31,.21}) rect(319,279,18,7,'dim')
+ if not open then
+  rect(259,227,115,8,{.33,.25,.20}) rect(266,243,102,8,{.33,.25,.20})
+  rect(310,232,15,18,'gold') rect(313,225,9,10,'edge') rect(316,238,3,7,'ink')
+ end
+ text('BLACKSMITH',258,163,10,open and 'gold' or 'dim',116,'center')
+ -- Exit stairs on the right.
+ rect(407,198,54,145,'ink') rect(402,193,64,7,'edge')
+ for i=0,5 do rect(412,325-i*16,44,8,{.20+i*.009,.23+i*.007,.28+i*.005}) end
+ text('TO KEEP',401,178,9,'gold',68,'center')
+ torch(205,225) torch(464,237)
+ rect(18,351,464,45,{.19,.19,.23}) rect(18,351,464,4,'edge')
+ for i=0,12 do rect(26+i*39,378,27,2,{.27,.26,.29}) end
+ hero(208,326,false)
+ text('REST. REBUILD. DESCEND AGAIN.',29,381,9,'dim',440,'center')
+ love.graphics.setScissor()
+ panel(16,412,468,101)
+ text('YOUR STASH',29,424,11,'gold') text('Kept after every run',270,425,10,'dim',200,'right')
+ local colors={'T','S','L','O','I'}
+ for i,name in ipairs(Session.resourceNames) do
+  local x=23+(i-1)*94
+  if i>1 then rect(x-4,450,1,49,'edge') end
+  text(name:upper(),x,452,9,colors[i],92,'center')
+  text(tostring(session.resources[name]),x,475,16,'text',92,'center')
+ end
+ panel(16,528,468,139)
+ text('BLACKSMITH',30,542,16,'text')
+ text(open and 'UNLOCKED' or 'LOCKED',328,546,11,open and 'green' or 'dim',140,'right')
+ if open then
+  text('The forge is lit. Your workshop is ready.',30,574,12,'dim')
+  text('Weapon and armor refining will come later.',30,595,12,'dim')
+  text('RESTORED',30,634,12,'green')
+ else
+  text('Restore the forge with materials from your runs.',30,573,11,'dim')
+  text('IRON  '..session.resources.Iron..' / 500',30,601,12,session.resources.Iron>=500 and 'green' or 'dim')
+  text('COPPER  '..session.resources.Copper..' / 500',254,601,12,session.resources.Copper>=500 and 'green' or 'dim')
+  text(session:canUnlockBlacksmith() and '[ B ]  UNLOCK BLACKSMITH' or '[ B ]  UNLOCK: 500 IRON + 500 COPPER',30,638,11,session:canUnlockBlacksmith() and 'gold' or 'dim')
+ end
+ panel(16,682,468,49)
+ text('[ ENTER ]  LEAVE FOR THE DUNGEON',20,698,14,'gold',460,'center')
+ local message=cellMessage
+ local summary=session.summary
+ if not message and summary then
+  local result=summary.status=='won' and 'Keep cleared.' or summary.status=='lost' and 'You awaken in your cell.' or 'You returned to your cell.'
+  message=result..' '..summary.loot..' resources gathered.\n'..summary.lines..' lines cleared / '..summary.kills..' enemies slain. Your stash is safe.'
+ end
+ text(message or 'Clear lines to gather materials. Return here to rebuild.',20,745,11,cellMessage and 'gold' or 'dim',460,'center')
+ text('ENTER  DESCEND    B  BLACKSMITH    M  '..(muted and 'UNMUTE' or 'MUTE'),16,785,9,'dim',468,'center')
+end
+function love.mousepressed(x,y,button)
+ if button~=1 or not session or session.scene~='cell' then return end
+ local ww,wh=love.graphics.getDimensions() local scale=math.min(ww/W,wh/H)
+ x=(x-math.floor((ww-W*scale)/2))/scale y=(y-math.floor((wh-H*scale)/2))/scale
+ if x>=16 and x<=484 then
+  if y>=682 and y<=731 then startRun()
+  elseif y>=528 and y<=667 then unlockBlacksmith() end
+ end
+end
+
+local function drawRun()
  love.graphics.push()
  if shake>0 and not paused then love.graphics.translate(math.random(-1,1)*math.floor(shake),math.random(-1,1)*math.floor(shake)) end
  text('SKELERUN',16,12,26,'gold') text('THE SUNKEN KEEP',277,17,12,'dim',207,'right')
@@ -241,7 +352,16 @@ function love.draw()
  text('A D / ARROWS  MOVE    UP / X  ROTATE    Z  REVERSE',16,770,10,'dim',468,'center')
  text('SPACE  DROP    C  HOLD    P  PAUSE    M  '..(muted and 'UNMUTE' or 'MUTE'),16,786,9,'dim',468,'center')
  love.graphics.pop() overlay()
+end
+function love.draw()
+ love.graphics.setCanvas(canvas) love.graphics.clear(C.bg)
+ if session.scene=='cell' then drawCell() else drawRun() end
+ if saveError then text(saveError,16,754,10,'red',468,'center') end
  love.graphics.setCanvas()
  local ww,wh=love.graphics.getDimensions() local scale=math.min(ww/W,wh/H)
  love.graphics.clear(.02,.025,.035) color({1,1,1}) love.graphics.draw(canvas,math.floor((ww-W*scale)/2),math.floor((wh-H*scale)/2),0,scale,scale)
+end
+
+function love.quit()
+ if session then session:save() end
 end
