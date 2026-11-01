@@ -196,11 +196,20 @@ local function sidebar()
  local labels={'1 LINE   1','2 LINES  3','3 LINES  5','4 LINES  9'}
  for i,s in ipairs(labels) do text(s,384,545+(i-1)*24,10,i==4 and 'gold' or 'dim') end
  text('CRITICAL!',377,641,10,'gold',107,'center')
- torch(55,395) torch(431,708)
- text('SCORE',16,470,10,'dim',82,'center') text(string.format('%05d',game.score),16,488,16,'text',82,'center')
- text('LINES',16,532,10,'dim',82,'center') text(tostring(game.lines),16,550,20,'text',82,'center')
- text('SLAIN',16,598,10,'dim',82,'center') text(game.kills..' / 5',16,616,16,'gold',82,'center')
- if game.position<.25 then text('DANGER',16,678,10,'red',82,'center') end
+ panel(16,349,82,303)
+ text('RESOURCES',16,358,10,'gold',82,'center')
+ text('+10 / BLOCK',19,373,9,'dim',76,'center')
+ local resources={{'Tin','T','T'},{'Iron','S / Z','S'},{'Copper','L / J','L'},{'Orichalcum','O','O'},{'Platinum','I','I'}}
+ for i,r in ipairs(resources) do
+  local y=393+(i-1)*52
+  text(r[1]:upper(),19,y,9,r[3],76,'center')
+  text(tostring(game.resources[r[1]]),19,y+12,16,'text',76,'center')
+  text(r[2],19,y+32,9,'dim',76,'center')
+ end
+ text('SCORE',16,668,10,'dim',82,'center') text(string.format('%05d',game.score),16,685,16,'text',82,'center')
+ text('LINES',16,717,10,'dim',82,'center') text(tostring(game.lines),16,733,16,'text',82,'center')
+ text('SLAIN',377,690,10,'dim',107,'center') text(game.kills..' / 5',377,708,16,'gold',107,'center')
+ if game.position<.25 then text('DANGER',377,741,10,'red',107,'center') end
 end
 local function overlay()
  if not paused and game.status=='playing' then return end

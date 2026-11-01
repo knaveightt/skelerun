@@ -21,6 +21,20 @@ The large lower board controls the battle above. Clear rows to damage the curren
 
 The red bar is enemy health; the gold bar below the dungeon is your remaining ground. The small gold meter beside enemy health shows time until the next attack. Defeating an enemy grants a short travel break. The board carries through the entire run.
 
+## Resources
+
+Each block removed in a cleared line grants **10 resources**, according to its original piece type. Each row is counted separately, including multi-line clears. Placing a piece without clearing a line gives no resources. The HUD tracks totals throughout the run; restarting resets them.
+
+| Piece type | Resource |
+| --- | --- |
+| T-piece | Tin |
+| S-piece / Z-piece | Iron |
+| L-piece / J-piece | Copper |
+| O-piece | Orichalcum |
+| I-piece | Platinum |
+
+A completed row always awards 100 total resources, split by its ten blocks. For example, six J-piece blocks and four I-piece blocks yield 60 Copper and 40 Platinum.
+
 ## Controls
 
 | Key | Action |

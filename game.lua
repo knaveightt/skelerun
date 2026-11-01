@@ -1,5 +1,6 @@
 local Game = {}
 Game.__index = Game
+Game.resourceForPiece = {T='Tin', S='Iron', Z='Iron', L='Copper', J='Copper', O='Orichalcum', I='Platinum'}
 Game.shapes = {
  I = {{0,1},{1,1},{2,1},{3,1}}, O = {{1,0},{2,0},{1,1},{2,1}},
  T = {{1,0},{0,1},{1,1},{2,1}}, S = {{1,0},{2,0},{0,1},{1,1}},
@@ -20,6 +21,7 @@ function Game.new(random)
  self.bag={} self.queue={} self.status='playing' self.position=.56
  self.enemyIndex=1 self.enemyHP=enemies[1].hp self.attack=0 self.travel=1.5
  self.lines=0 self.score=0 self.kills=0 self.combo=-1 self.gravity=0 self.lockTime=0
+ self.resources={Tin=0,Iron=0,Copper=0,Orichalcum=0,Platinum=0}
  self.events={} self.time=0 self.held=nil self.holdUsed=false self:fillQueue() self:spawn()
  return self
 end
@@ -84,11 +86,21 @@ function Game:drop()
  local y=self:ghostY() self.score=self.score+(y-self.piece.y)*2 self.piece.y=y self:lock()
 end
 function Game:clearRows()
- local count=0 local y=20
+ local count=0 local y=20 local clearedRows={}
  while y>=1 do
   local full=true for x=1,10 do if not self.board[y][x] then full=false break end end
-  if full then table.remove(self.board,y) table.insert(self.board,1,{}) count=count+1 else y=y-1 end
- end return count
+  if full then
+   local blocks={I=0,O=0,T=0,S=0,Z=0,J=0,L=0}
+   for x=1,10 do
+    local kind=self.board[y][x]
+    blocks[kind]=blocks[kind]+1
+    local resource=Game.resourceForPiece[kind]
+    self.resources[resource]=self.resources[resource]+10
+   end
+   clearedRows[#clearedRows+1]=blocks
+   table.remove(self.board,y) table.insert(self.board,1,{}) count=count+1
+  else y=y-1 end
+ end return count,clearedRows
 end
 function Game:lock()
  local overflow=false
@@ -96,13 +108,13 @@ function Game:lock()
   if c[2]<1 then overflow=true else self.board[c[2]][c[1]]=self.piece.kind end
  end
  if overflow then self:lose('The room filled with rubble.') return end
- local count=self:clearRows()
+ local count,clearedRows=self:clearRows()
  if count>0 then
   self.combo=self.combo+1 self.lines=self.lines+count
   local damage=({1,3,5,9})[count]
   self.score=self.score+({100,300,500,1000})[count]+math.max(0,self.combo)*50
   self.position=math.min(.92,self.position+.035*count)
-  self.enemyHP=self.enemyHP-damage self:emit('clear',{lines=count,damage=damage})
+  self.enemyHP=self.enemyHP-damage self:emit('clear',{lines=count,damage=damage,rows=clearedRows})
   if self.enemyHP<=0 then
    self.kills=self.kills+1 self:emit('kill')
    if self.enemyIndex==#enemies then self.status='won' self:emit('won') return end
