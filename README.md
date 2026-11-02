@@ -12,11 +12,11 @@ With a Godot executable on your command line:
 godot --path .
 ```
 
-The portrait window resizes with a 500×800 logical canvas. The Compatibility renderer supports OpenGL 3.3 hardware.
+The portrait window resizes with a 500×800 logical canvas, keeping the full board visible at narrow phone aspect ratios. Mobile orientation is locked to portrait. The Compatibility renderer supports OpenGL 3.3 hardware.
 
 ## The loop
 
-You begin in your dungeon cell. Press **Enter** or click **Leave for the dungeon** to choose a destination. All six dungeons are open. Select with **1–6**, **Up/Down**, or a mouse click, then press **Enter** or click **Begin Run**. **Escape** or **Back to Cell** cancels selection.
+You begin in your dungeon cell. Tap **Choose a Dungeon** (or press **Enter**) to choose a destination. All six dungeons are open. Select with **1–6**, **Up/Down**, or a mouse click, then press **Enter** or click **Begin Run**. **Escape** or **Back to Cell** cancels selection.
 
 Play the large falling-block board to fight enemies in the dungeon strip above it. Runs are **endless until you lose**: each defeated enemy is replaced, with no final boss victory or fixed kill limit. Monster attacks push the knight left, and continuous retreat pressure gradually pulls you left even between enemies. Cleared lines restore ground. Reaching the left edge or filling the board ends the run.
 
@@ -68,7 +68,35 @@ Every cleared block grants **10 materials**, according to its original tetromino
 
 The Blacksmith starts locked. In your cell, press **B** or click its workshop card to spend **500 Iron AND 500 Copper** and permanently unlock it. Failed attempts spend nothing; it cannot charge a second time. Its forge lights up when restored. Weapon and armor refinement are intentionally reserved for later.
 
-## Controls
+## Touch and mobile controls
+
+Every action can be performed without a keyboard. Tap buttons and cards to navigate; actions trigger on finger release, and dragging between menu buttons does not activate them. The same interactions work with a mouse on desktop.
+
+| Touch interaction | Action |
+| --- | --- |
+| Swipe left / right on the board | Move by one column per block-width of finger travel; drag farther for multiple columns |
+| Swipe down on the board | Hard drop immediately, once per swipe |
+| Swipe up on the board | Rotate clockwise once per swipe |
+| Tap **Hold** | Store / swap the held piece, once per placement |
+| Tap **Rotate <** | Rotate counterclockwise |
+| Press and hold **Soft Drop** | Lower the piece faster until released or slid away |
+| Tap **Pause** | Open the pause menu |
+| Tap **Continue** / **Abandon Run** | Resume / return to cell with collected materials |
+| Tap **Sound** in pause or cell settings | Mute / unmute |
+| Tap the Blacksmith scene or card | Unlock / inspect workshop |
+| Tap the stairs or **Choose a Dungeon** | Open dungeon selection |
+| Tap a dungeon card, then **Begin Run** | Start the selected dungeon |
+| Tap **Back to Cell** | Cancel selection or close settings |
+| Tap **Settings** in the cell | Access sound and **Reset All Progress** |
+| Tap **Reset All** / **Cancel** in the confirmation | Confirm / cancel a full progress reset |
+
+You can hold **Soft Drop** with one finger and move the piece with another. Only one board gesture owns the falling piece at a time. Horizontal swipes stay horizontal, small jitter is ignored, and a gesture cannot act on the next piece if the previous piece locks. Losing focus clears held inputs and pauses. Android's Back action dismisses dialogs/selection or opens pause during a run.
+
+Touch and mouse emulation are disabled to prevent a single physical touch from triggering duplicate actions. Native touch events and mouse events use the same gesture handler. Touch controls are always visible; touching the screen switches keyboard hints to touch hints.
+
+These are controls and project settings, not an Android/iOS export package. Validation uses synthesized native touch events and phone-sized render viewports; physical-device testing is still to be done.
+
+## Keyboard controls
 
 | Key | Action |
 | --- | --- |
@@ -89,13 +117,13 @@ The Blacksmith starts locked. In your cell, press **B** or click its workshop ca
 | R during run | Return to cell with materials |
 | M | Mute / unmute |
 
-The pause menu has clickable **Continue** and **Abandon Run** options. Click **Abandon Run** or press **R** to return to the cell with your gathered resources.
+The pause menu has touch/clickable **Continue**, **Abandon Run**, and **Sound** options. Click **Abandon Run** or press **R** to return to the cell with your gathered resources.
 
 Losing window focus pauses a run. Keyboard repeat is handled by the game, independently of operating-system repeat settings.
 
 ## Reset progress
 
-In the dungeon cell, press **R** to open **Reset all progress?**. Press **Y** or click **Reset All** to confirm; press **N**, **Escape**, or click **Cancel** to keep your progress. The prompt blocks other cell actions. Confirming clears all five resources, the Blacksmith unlock, and the last run summary, then saves the fresh state. This cannot be undone. If saving fails, the previous progress is retained. During a run, **R** still returns to the cell.
+In the dungeon cell, tap **Settings → Reset All Progress**, or press **R**, to open **Reset all progress?**. Press **Y** or click **Reset All** to confirm; press **N**, **Escape**, or click **Cancel** to keep your progress. The prompt blocks other cell actions. Confirming clears all five resources, the Blacksmith unlock, and the last run summary, then saves the fresh state. This cannot be undone. If saving fails, the previous progress is retained. During a run, **R** still returns to the cell.
 
 ## Saved progress
 
@@ -113,7 +141,8 @@ On first launch, if no Godot save exists, the game checks for the original `love
 
 - `project.godot` — active project configuration and starting scene.
 - `scenes/main.tscn` — entry scene, running the cell and dungeon views.
-- `scripts/main.gd` — input, scene transitions, HUD, effects, and synthesized audio.
+- `scripts/main.gd` — input, scene transitions, touch menus, HUD, effects, and synthesized audio.
+- `scripts/touch_input.gd` — touch/mouse tracking, axis-locked swipes, multi-touch soft drop, canceled gestures, and safe tap activation.
 - `scripts/pixel_art.gd` — reusable native drawing helpers and pixel characters.
 - `scripts/run.gd` — board, bag, movement, row composition, scoring, endless combat, and pressure scaling.
 - `scripts/dungeons.gd` — six ordered destinations, native rosters, and easier-dungeon visitors.
@@ -140,6 +169,12 @@ godot --path . --script res://tests/smoke_test.gd
 
 # Same interaction checks without a display; screenshot capture is skipped.
 godot --headless --path . --script res://tests/smoke_test.gd
+
+# 68 native-touch checks covering all menu actions, swipes, hold, multi-touch,
+# cancellation, focus loss, and scaled hit testing at phone resolutions.
+# With a display, writes touch_*.png phone previews in user://.
+godot --path . --script res://tests/touch_test.gd
+godot --headless --path . --script res://tests/touch_test.gd
 ```
 
 For fully isolated test saves on Linux, prefix commands with `XDG_DATA_HOME=/tmp/skelerun-test-data XDG_CONFIG_HOME=/tmp/skelerun-test-config`. Tests create and remove only `test_progress.json`; they never overwrite `progress.json`.

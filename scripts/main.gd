@@ -3,8 +3,25 @@ const Session = preload("res://scripts/session.gd")
 const Art = preload("res://scripts/pixel_art.gd")
 const DungeonRun = preload("res://scripts/run.gd")
 const Dungeons = preload("res://scripts/dungeons.gd")
-const PAUSE_CONTINUE = Rect2(79,406,342,42)
-const PAUSE_ABANDON = Rect2(79,458,342,42)
+const TouchInput = preload("res://scripts/touch_input.gd")
+const PAUSE_CONTINUE = Rect2(79,390,342,64)
+const PAUSE_ABANDON = Rect2(79,466,342,64)
+const PAUSE_SOUND = Rect2(79,542,342,64)
+const RUN_PAUSE = Rect2(377,508,107,72)
+const RUN_REVERSE = Rect2(377,588,107,72)
+const RUN_SOFT = Rect2(377,668,107,72)
+const CELL_SETTINGS = Rect2(382,55,102,64)
+const SETTINGS_SOUND = Rect2(79,330,342,64)
+const SETTINGS_RESET = Rect2(79,410,342,64)
+const SETTINGS_BACK = Rect2(79,490,342,64)
+const RESET_CANCEL = Rect2(68,446,170,64)
+const RESET_CONFIRM = Rect2(252,446,180,64)
+const SELECT_BEGIN = Rect2(16,664,468,60)
+const SELECT_BACK = Rect2(16,734,468,64)
+const CELL_LEAVE = Rect2(16,678,468,64)
+var pointer_input = TouchInput.new()
+var touch_mode = false
+var settings_open = false
 var session
 var game
 var art
@@ -29,7 +46,8 @@ func _ready():
 	session = Session.new()
 	art = Art.new(self)
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	get_window().min_size = Vector2i(480,768)
+	get_window().min_size = Vector2i(320,512)
+	touch_mode = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 	get_tree().auto_accept_quit = false
 	build_sounds()
 
@@ -59,10 +77,12 @@ func play(name):
 	if not muted and players.has(name): players[name].play()
 
 func open_dungeon_selection():
+	pointer_input.clear()
 	dungeon_selection = true
 	repeat_direction = 0
 
 func start_run():
+	pointer_input.clear()
 	game = session.start_run(-1,selected_dungeon)
 	dungeon_selection = false
 	if game == null: return
@@ -81,6 +101,7 @@ func unlock_blacksmith():
 	play("kill" if not was_unlocked and session.blacksmith_unlocked else "hold")
 
 func abandon_run():
+	pointer_input.clear()
 	if session.scene != "run": return
 	session.return_to_cell()
 	paused = false
@@ -114,7 +135,7 @@ func _process(dt):
 	clock += dt
 	art.time = clock
 	if session.scene == "run" and not paused:
-		game.update(dt,Input.is_physical_key_pressed(KEY_DOWN) or Input.is_physical_key_pressed(KEY_S))
+		game.update(dt,pointer_input.soft_drop_active() or Input.is_physical_key_pressed(KEY_DOWN) or Input.is_physical_key_pressed(KEY_S))
 		if game.status == "playing" and repeat_direction != 0:
 			repeat_time += dt
 			var delay = 0.055 if repeating else 0.16
@@ -127,6 +148,7 @@ func _process(dt):
 		game.events.clear()
 		if game.status != "playing":
 			session.return_to_cell()
+			pointer_input.clear()
 			repeat_direction = 0
 	shake = maxf(0,shake-dt*20)
 	hit_flash = maxf(0,hit_flash-dt)
@@ -142,62 +164,138 @@ func _process(dt):
 		if notices[i].life <= 0: notices.remove_at(i)
 	queue_redraw()
 
-func _unhandled_input(event):
-	if reset_confirmation:
-		if event is InputEventKey and event.pressed and not event.echo:
-			if event.physical_keycode == KEY_Y: confirm_reset()
-			elif event.physical_keycode in [KEY_N,KEY_ESCAPE]: reset_confirmation = false
-		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			var point = get_global_transform_with_canvas().affine_inverse()*event.position
-			if Rect2(68,446,170,42).has_point(point): reset_confirmation = false
-			elif Rect2(252,446,180,42).has_point(point): confirm_reset()
-		queue_redraw()
-		return
-	if dungeon_selection:
-		if event is InputEventKey and event.pressed and not event.echo:
-			var code = event.physical_keycode
-			if code in [KEY_ESCAPE,KEY_BACKSPACE]: dungeon_selection = false
-			elif code in [KEY_UP,KEY_W]: selected_dungeon = posmod(selected_dungeon-1,6)
-			elif code in [KEY_DOWN,KEY_S]: selected_dungeon = (selected_dungeon+1)%6
-			elif code >= KEY_1 and code <= KEY_6: selected_dungeon = code-KEY_1
-			elif code in [KEY_ENTER,KEY_KP_ENTER,KEY_SPACE]: start_run()
-		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			var point = get_global_transform_with_canvas().affine_inverse()*event.position
+func input_context() -> String:
+	if reset_confirmation: return "reset"
+	if settings_open: return "settings"
+	if dungeon_selection: return "selection"
+	if session.scene == "cell": return "cell"
+	return "pause" if paused else "run"
+
+func current_piece_serial() -> int:
+	return game.piece_serial if game != null else -1
+
+func action_at(point: Vector2) -> String:
+	match input_context():
+		"reset":
+			if RESET_CANCEL.has_point(point): return "cancel_reset"
+			if RESET_CONFIRM.has_point(point): return "confirm_reset"
+		"settings":
+			if SETTINGS_SOUND.has_point(point): return "mute"
+			if SETTINGS_RESET.has_point(point): return "request_reset"
+			if SETTINGS_BACK.has_point(point): return "close_settings"
+		"selection":
 			for i in range(6):
-				if Rect2(16,126+i*88,468,78).has_point(point): selected_dungeon = i
-			if Rect2(16,678,468,48).has_point(point): start_run()
-			elif Rect2(16,738,468,36).has_point(point): dungeon_selection = false
+				if Rect2(16,126+i*88,468,78).has_point(point): return "select_"+str(i)
+			if SELECT_BEGIN.has_point(point): return "begin"
+			if SELECT_BACK.has_point(point): return "cancel_selection"
+		"pause":
+			if PAUSE_CONTINUE.has_point(point): return "resume"
+			if PAUSE_ABANDON.has_point(point): return "abandon"
+			if PAUSE_SOUND.has_point(point): return "mute"
+		"cell":
+			if CELL_SETTINGS.has_point(point): return "settings"
+			if CELL_LEAVE.has_point(point) or Rect2(402,178,64,174).has_point(point): return "choose"
+			if Rect2(16,528,468,139).has_point(point) or Rect2(250,160,133,190).has_point(point): return "blacksmith"
+		"run":
+			if RUN_PAUSE.has_point(point): return "pause"
+			if RUN_REVERSE.has_point(point): return "reverse"
+			if RUN_SOFT.has_point(point): return "soft_drop"
+			if Rect2(16,249,82,87).has_point(point): return "hold"
+	return ""
+
+func toggle_mute():
+	muted = not muted
+	if muted:
+		for player in players.values(): player.stop()
+
+func set_paused(value: bool):
+	paused = value
+	repeat_direction = 0
+	pointer_input.clear()
+
+func activate(action: String):
+	match action:
+		"choose": open_dungeon_selection()
+		"begin": start_run()
+		"cancel_selection": dungeon_selection = false
+		"settings": settings_open = true
+		"close_settings": settings_open = false
+		"request_reset":
+			settings_open = false
+			reset_confirmation = true
+		"cancel_reset": reset_confirmation = false
+		"confirm_reset": confirm_reset()
+		"blacksmith": unlock_blacksmith()
+		"pause": set_paused(true)
+		"resume": set_paused(false)
+		"abandon": abandon_run()
+		"mute": toggle_mute()
+		"hold":
+			if session.scene=="run" and not paused: game.hold()
+		"reverse":
+			if session.scene=="run" and not paused: game.rotate(-1)
+		_:
+			if action.begins_with("select_"): selected_dungeon = int(action.trim_prefix("select_"))
+	queue_redraw()
+
+func perform_pointer_actions(actions: Array):
+	for action in actions:
+		if action.action in ["move","rotate","drop"]:
+			if session.scene!="run" or paused or game.status!="playing": continue
+			match action.action:
+				"move": game.move(action.direction,0)
+				"rotate": game.rotate(1)
+				"drop": game.drop()
+		else: activate(action.action)
+
+func _unhandled_input(event):
+	if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventMouseButton or event is InputEventMouseMotion:
+		var is_touch = event is InputEventScreenTouch or event is InputEventScreenDrag
+		if is_touch: touch_mode = true
+		var id = event.index if is_touch else -1
+		var point = get_global_transform_with_canvas().affine_inverse()*event.position
+		if event is InputEventScreenTouch and event.canceled:
+			pointer_input.cancel(id)
+		elif event is InputEventScreenDrag or (event is InputEventMouseMotion and pointer_input.pointers.has(id)):
+			perform_pointer_actions(pointer_input.motion(id,point,input_context(),current_piece_serial()))
+		elif event is InputEventScreenTouch or (event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT):
+			if event.pressed:
+				pointer_input.begin(id,point,input_context(),action_at(point),input_context()=="run" and game.status=="playing",current_piece_serial())
+			else:
+				perform_pointer_actions(pointer_input.finish(id,point,input_context(),action_at(point),current_piece_serial()))
 		queue_redraw()
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and session.scene == "run" and paused:
-		var point = get_global_transform_with_canvas().affine_inverse()*event.position
-		if PAUSE_CONTINUE.has_point(point): paused = false
-		elif PAUSE_ABANDON.has_point(point): abandon_run()
-		queue_redraw()
-		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and session.scene == "cell":
-		var point = get_global_transform_with_canvas().affine_inverse()*event.position
-		if Rect2(16,682,468,49).has_point(point): open_dungeon_selection()
-		elif Rect2(16,528,468,139).has_point(point): unlock_blacksmith()
 	if not event is InputEventKey: return
 	var key = event.physical_keycode
 	if not event.pressed:
 		if (repeat_direction == -1 and key in [KEY_LEFT,KEY_A]) or (repeat_direction == 1 and key in [KEY_RIGHT,KEY_D]): repeat_direction = 0
 		return
 	if event.echo: return
+	if reset_confirmation:
+		if key == KEY_Y: activate("confirm_reset")
+		elif key in [KEY_N,KEY_ESCAPE]: activate("cancel_reset")
+		return
 	if key == KEY_M:
-		muted = not muted
-		if muted:
-			for player in players.values(): player.stop()
+		toggle_mute()
+		return
+	if settings_open:
+		if key in [KEY_ESCAPE,KEY_BACKSPACE]: activate("close_settings")
+		elif key == KEY_R: activate("request_reset")
+		return
+	if dungeon_selection:
+		if key in [KEY_ESCAPE,KEY_BACKSPACE]: activate("cancel_selection")
+		elif key in [KEY_UP,KEY_W]: selected_dungeon = posmod(selected_dungeon-1,6)
+		elif key in [KEY_DOWN,KEY_S]: selected_dungeon = (selected_dungeon+1)%6
+		elif key>=KEY_1 and key<=KEY_6: selected_dungeon = key-KEY_1
+		elif key in [KEY_ENTER,KEY_KP_ENTER,KEY_SPACE]: start_run()
 		return
 	if session.scene == "cell":
 		if key in [KEY_ENTER,KEY_KP_ENTER,KEY_SPACE]: open_dungeon_selection()
 		elif key == KEY_B: unlock_blacksmith()
-		elif key == KEY_R: reset_confirmation = true
+		elif key == KEY_R: activate("request_reset")
 		return
 	if key in [KEY_ESCAPE,KEY_P]:
-		paused = not paused
-		repeat_direction = 0
+		set_paused(not paused)
 		return
 	if key == KEY_R:
 		abandon_run()
@@ -218,10 +316,17 @@ func _notification(what):
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		session.save()
 		get_tree().quit()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		pointer_input.clear()
+		if reset_confirmation: activate("cancel_reset")
+		elif settings_open: activate("close_settings")
+		elif dungeon_selection: activate("cancel_selection")
+		elif session.scene=="run": set_paused(true)
+		else: activate("settings")
 	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		pointer_input.clear()
 		if session.scene == "run":
-			paused = true
-			repeat_direction = 0
+			set_paused(true)
 			session.save()
 
 func header():
@@ -231,7 +336,8 @@ func header():
 func draw_cell():
 	header()
 	art.text("YOUR CELL",16,62,20)
-	art.text("A little shelter beneath the keep.",16,91,12,"dim")
+	art.text("Rest. Rebuild. Descend again.",16,94,12,"dim")
+	draw_button(CELL_SETTINGS,"SETTINGS","gold",12)
 	art.panel(16,120,468,278)
 	art.bricks(18,122,464,229)
 	art.rect(63,148,68,77,"edge")
@@ -299,14 +405,13 @@ func draw_cell():
 	if open:
 		art.text("The forge is lit. Your workshop is ready.",30,574,12,"dim")
 		art.text("Weapon and armor refining will come later.",30,595,12,"dim")
-		art.text("RESTORED",30,634,12,"green")
+		art.text("TAP TO INSPECT" if touch_mode else "RESTORED",30,634,12,"green")
 	else:
 		art.text("Restore the forge with materials from your runs.",30,573,11,"dim")
 		art.text("IRON  %s / 500" % session.resources.Iron,30,601,12,"green" if session.resources.Iron>=500 else "dim")
 		art.text("COPPER  %s / 500" % session.resources.Copper,254,601,12,"green" if session.resources.Copper>=500 else "dim")
-		art.text("[ B ]  UNLOCK BLACKSMITH" if session.can_unlock_blacksmith() else "[ B ]  UNLOCK: 500 IRON + 500 COPPER",30,638,11,"gold" if session.can_unlock_blacksmith() else "dim")
-	art.panel(16,682,468,49)
-	art.text("[ ENTER ]  LEAVE FOR THE DUNGEON",20,698,14,"gold",460,HORIZONTAL_ALIGNMENT_CENTER)
+		art.text(("TAP TO UNLOCK" if touch_mode else "[ B ] UNLOCK BLACKSMITH") if session.can_unlock_blacksmith() else ("TAP WORKSHOP: 500 IRON + 500 COPPER" if touch_mode else "[ B ] UNLOCK: 500 IRON + 500 COPPER"),30,638,11,"gold" if session.can_unlock_blacksmith() else "dim")
+	draw_button(CELL_LEAVE,"CHOOSE A DUNGEON" if touch_mode else "[ ENTER ] CHOOSE A DUNGEON","gold",16)
 	var message = cell_message
 	var summary = session.summary
 	if message == "" and not summary.is_empty():
@@ -314,7 +419,7 @@ func draw_cell():
 		message = result+" %s resources gathered." % summary.loot
 		art.text("%s / %s slain / %ds" % [summary.get("dungeon","Dungeon"),summary.kills,int(summary.get("elapsed",0))],20,762,11,"dim",460,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text(message if message != "" else "Clear lines to gather materials. Return here to rebuild.",20,745,11,"gold" if cell_message != "" else "dim",460,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("ENTER DESCEND   B BLACKSMITH   R RESET   M SOUND",16,785,9,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text("Settings: sound and reset progress" if touch_mode else "ENTER DESCEND   B BLACKSMITH   R RESET   M SOUND",16,785,9,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
 
 func draw_dungeon():
 	art.panel(16,53,468,143)
@@ -348,14 +453,14 @@ func draw_sidebar():
 	art.panel(16,249,82,87)
 	art.text("HOLD",16,260,11,"dim",82,HORIZONTAL_ALIGNMENT_CENTER)
 	art.preview(game.held,22,287)
-	art.text("C / SHIFT",16,317,9,"dim" if game.hold_used else "gold",82,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text(("USED" if game.hold_used else "TAP TO HOLD") if touch_mode else "C / SHIFT",16,317,9,"dim" if game.hold_used else "gold",82,HORIZONTAL_ALIGNMENT_CENTER)
 	art.panel(377,249,107,251)
 	art.text("NEXT",377,261,11,"dim",107,HORIZONTAL_ALIGNMENT_CENTER)
 	for i in range(4): art.preview(game.queue[i],397,283+i*52)
-	art.text("LINE POWER",377,520,10,"gold",107,HORIZONTAL_ALIGNMENT_CENTER)
-	var labels = ["1 LINE   1","2 LINES  3","3 LINES  5","4 LINES  9"]
-	for i in range(4): art.text(labels[i],384,545+i*24,10,"gold" if i==3 else "dim")
-	art.text("CRITICAL!",377,641,10,"gold",107,HORIZONTAL_ALIGNMENT_CENTER)
+	draw_button(RUN_PAUSE,"PAUSE","gold",16)
+	draw_button(RUN_REVERSE,"ROTATE <","text",16)
+	draw_button(RUN_SOFT,"SOFT DROP","text",16)
+	if pointer_input.soft_drop_active(): art.rect(RUN_SOFT.position.x+3,RUN_SOFT.position.y+3,RUN_SOFT.size.x-6,3,"gold")
 	art.panel(16,349,82,303)
 	art.text("RESOURCES",16,358,10,"gold",82,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text("+10 / BLOCK",19,373,9,"dim",76,HORIZONTAL_ALIGNMENT_CENTER)
@@ -371,9 +476,7 @@ func draw_sidebar():
 	art.text("%05d" % game.score,16,685,16,"text",82,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text("LINES",16,717,10,"dim",82,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text(game.lines,16,733,16,"text",82,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("SLAIN",377,690,10,"dim",107,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text(str(game.kills),377,708,16,"gold",107,HORIZONTAL_ALIGNMENT_CENTER)
-	if game.position<0.25: art.text("DANGER",377,741,10,"red",107,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text("SLAIN "+str(game.kills),377,746,12,"gold",107,HORIZONTAL_ALIGNMENT_CENTER)
 
 func draw_run():
 	if shake>0 and not paused: draw_set_transform(Vector2(randf_range(-shake,shake),randf_range(-shake,shake)))
@@ -381,6 +484,7 @@ func draw_run():
 	art.text("%02d:%02d   RETREAT x%.1f" % [int(game.elapsed)/60,int(game.elapsed)%60,game.retreat_rate()/0.0015],260,36,9,"dim",224,HORIZONTAL_ALIGNMENT_RIGHT)
 	draw_dungeon()
 	art.text("FOE %03d  %s" % [game.enemy_index+1,game.enemy().name],18,207,12)
+	art.text("LINES 1/2/3/4 = DAMAGE 1/3/5/9",18,238,9,"dim")
 	var hp = maxi(0,game.enemy_hp)
 	art.text("%s / %s HP" % [hp,game.enemy().hp],366,207,11,"dim",115,HORIZONTAL_ALIGNMENT_RIGHT)
 	art.rect(18,227,318,6,"stone")
@@ -395,20 +499,19 @@ func draw_run():
 		var n = notices.back()
 		art.panel(118,348,238,36)
 		art.text(n.label,118,359,12,n.c,238,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("A D / ARROWS  MOVE    UP / X  ROTATE    Z  REVERSE",16,770,10,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("SPACE  DROP    C  HOLD    P  PAUSE    M  "+("UNMUTE" if muted else "MUTE"),16,786,9,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text("SWIPE LEFT/RIGHT: MOVE   UP: ROTATE   DOWN: DROP" if touch_mode else "A D / ARROWS MOVE   UP / X ROTATE   Z REVERSE",16,770,10,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text("TAP HOLD   HOLD SOFT DROP   SOUND IN PAUSE" if touch_mode else "SPACE DROP   C HOLD   P PAUSE   M SOUND",16,786,9,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
 	draw_set_transform(Vector2.ZERO)
 	if paused:
 		art.rect(0,0,500,800,"bg",0.85)
-		art.panel(51,262,398,284)
+		art.panel(51,250,398,380)
 		art.text("PAUSED",65,286,26,"text",370,HORIZONTAL_ALIGNMENT_CENTER)
 		art.text("Take a breath. The dungeon can wait.",73,336,12,"dim",354,HORIZONTAL_ALIGNMENT_CENTER)
 		art.text("%s LINES / %s SLAIN / %s POINTS" % [game.lines,game.kills,game.score],65,376,12,"text",370,HORIZONTAL_ALIGNMENT_CENTER)
-		art.panel(PAUSE_CONTINUE.position.x,PAUSE_CONTINUE.position.y,PAUSE_CONTINUE.size.x,PAUSE_CONTINUE.size.y)
-		art.text("[ P / ESC ]  CONTINUE",79,418,14,"gold",342,HORIZONTAL_ALIGNMENT_CENTER)
-		art.panel(PAUSE_ABANDON.position.x,PAUSE_ABANDON.position.y,PAUSE_ABANDON.size.x,PAUSE_ABANDON.size.y)
-		art.text("[ R ]  ABANDON RUN",79,470,14,"red",342,HORIZONTAL_ALIGNMENT_CENTER)
-		art.text("Return to your cell. Keep gathered resources.",65,514,11,"dim",370,HORIZONTAL_ALIGNMENT_CENTER)
+		draw_button(PAUSE_CONTINUE,"CONTINUE" if touch_mode else "[ P / ESC ] CONTINUE","gold",14)
+		draw_button(PAUSE_ABANDON,"ABANDON RUN" if touch_mode else "[ R ] ABANDON RUN","red",14)
+		draw_button(PAUSE_SOUND,"SOUND: "+("OFF" if muted else "ON"),"dim" if muted else "green",14)
+		art.text("Return to your cell. Keep gathered resources.",65,613,11,"dim",370,HORIZONTAL_ALIGNMENT_CENTER)
 
 func _draw():
 	if art == null: return
@@ -417,9 +520,12 @@ func _draw():
 	elif session.scene == "cell": draw_cell()
 	else: draw_run()
 	if session.save_error != "": art.text(session.save_error,16,780,10,"red",468,HORIZONTAL_ALIGNMENT_CENTER)
+	if settings_open: draw_settings()
 	if reset_confirmation: draw_reset_confirmation()
 
 func confirm_reset():
+	pointer_input.clear()
+	settings_open = false
 	reset_confirmation = false
 	if not session.reset_progress():
 		cell_message = "Reset failed. Your progress has been kept."
@@ -439,15 +545,13 @@ func confirm_reset():
 
 func draw_reset_confirmation():
 	art.rect(0,0,500,800,"bg",0.9)
-	art.panel(48,278,404,230)
+	art.panel(48,278,404,250)
 	art.text("RESET ALL PROGRESS?",60,300,22,"red",380,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text("Are you sure you want to start over?",60,348,14,"text",380,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text("All resources and workshop unlocks will be lost.",60,378,12,"dim",380,HORIZONTAL_ALIGNMENT_CENTER)
 	art.text("This cannot be undone.",60,403,12,"dim",380,HORIZONTAL_ALIGNMENT_CENTER)
-	art.panel(68,446,170,42)
-	art.text("[ N / ESC ] CANCEL",68,459,12,"gold",170,HORIZONTAL_ALIGNMENT_CENTER)
-	art.panel(252,446,180,42)
-	art.text("[ Y ] RESET ALL",252,459,12,"red",180,HORIZONTAL_ALIGNMENT_CENTER)
+	draw_button(RESET_CANCEL,"CANCEL" if touch_mode else "[ N / ESC ] CANCEL","gold",12)
+	draw_button(RESET_CONFIRM,"RESET ALL" if touch_mode else "[ Y ] RESET ALL","red",12)
 
 func _exit_tree():
 	for player in players.values():
@@ -472,8 +576,19 @@ func draw_dungeon_selection():
 		art.text("OPEN",96,y+55,9,"green")
 		art.text("DIFFICULTY",332,y+56,9,"dim")
 		for rank in range(6): art.rect(401+rank*11,y+58,7,7,dungeon.accent if rank<=i else "stone")
-	art.panel(16,678,468,48)
-	art.text("[ ENTER ]  BEGIN RUN",16,693,16,Dungeons.DATA[selected_dungeon].accent,468,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("Endless enemies. Retreat pressure rises with time.",16,730,11,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("[ ESC ]  BACK TO CELL",16,753,12,"gold",468,HORIZONTAL_ALIGNMENT_CENTER)
-	art.text("1-6 / UP / DOWN  SELECT    ENTER  BEGIN    MOUSE  SELECT",16,786,9,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text("Endless enemies. Retreat pressure rises with time.",16,649,11,"dim",468,HORIZONTAL_ALIGNMENT_CENTER)
+	draw_button(SELECT_BEGIN,"BEGIN RUN" if touch_mode else "[ ENTER ] BEGIN RUN",Dungeons.DATA[selected_dungeon].accent,16)
+	draw_button(SELECT_BACK,"BACK TO CELL" if touch_mode else "[ ESC ] BACK TO CELL","gold",12)
+
+func draw_button(bounds: Rect2,label: String,tint = "text",size: int = 14):
+	art.panel(bounds.position.x,bounds.position.y,bounds.size.x,bounds.size.y)
+	art.text(label,bounds.position.x,bounds.position.y+(bounds.size.y-size)/2-2,size,tint,bounds.size.x,HORIZONTAL_ALIGNMENT_CENTER)
+
+func draw_settings():
+	art.rect(0,0,500,800,"bg",0.9)
+	art.panel(51,238,398,340)
+	art.text("CELL SETTINGS",65,262,24,"text",370,HORIZONTAL_ALIGNMENT_CENTER)
+	art.text("Sound and saved progression",65,301,12,"dim",370,HORIZONTAL_ALIGNMENT_CENTER)
+	draw_button(SETTINGS_SOUND,"SOUND: "+("OFF" if muted else "ON"),"dim" if muted else "green")
+	draw_button(SETTINGS_RESET,"RESET ALL PROGRESS","red")
+	draw_button(SETTINGS_BACK,"BACK TO CELL","gold")

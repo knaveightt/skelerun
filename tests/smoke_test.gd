@@ -13,6 +13,11 @@ func key(code):
 	event.physical_keycode = code
 	event.pressed = true
 	app._unhandled_input(event)
+func click(event):
+	event.pressed = true
+	app._unhandled_input(event)
+	event.pressed = false
+	app._unhandled_input(event)
 func capture(name):
 	if DisplayServer.get_name() == "headless": return
 	app.queue_redraw()
@@ -70,25 +75,25 @@ func run_test():
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(250,706)
 	mouse.button_index = MOUSE_BUTTON_LEFT
 	mouse.pressed = true
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(app.dungeon_selection,"resized mouse click opens selection")
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(250,126+5*88+35)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(app.selected_dungeon==5,"mouse selects throne room")
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(250,700)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(app.session.scene=="run" and app.game.dungeon_index==5,"mouse begins chosen run")
 	app.game.resources.Tin += 20
 	app.game.loot.Tin += 20
 	var stash = app.session.resources.duplicate()
 	key(KEY_P)
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(250,427)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(not app.paused and app.session.scene=="run","pause continue button resumes run")
 	key(KEY_P)
 	await capture("pause_abandon")
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(250,479)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(app.session.scene=="cell" and not app.paused,"pause abandon button returns to cell")
 	check(app.session.resources==stash and app.session.summary.loot==20,"abandon keeps gathered materials and run summary")
 	var time_before_return = app.game.elapsed
@@ -122,7 +127,7 @@ func run_test():
 	key(KEY_B)
 	check(app.session.scene=="cell" and app.reset_confirmation,"modal blocks cell actions")
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(250,706)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(app.session.scene=="cell" and app.reset_confirmation,"modal blocks dungeon mouse click")
 	key(KEY_ESCAPE)
 	check(not app.reset_confirmation and app.session.blacksmith_unlocked,"escape cancels safely")
@@ -131,11 +136,11 @@ func run_test():
 	check(not app.reset_confirmation and app.session.resources.Iron==50,"N cancels safely")
 	key(KEY_R)
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(150,465)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(not app.reset_confirmation and app.session.blacksmith_unlocked,"cancel button")
 	key(KEY_R)
 	mouse.position = app.get_global_transform_with_canvas()*Vector2(340,465)
-	app._unhandled_input(mouse)
+	click(mouse)
 	check(not app.reset_confirmation and not app.session.blacksmith_unlocked and app.game==null,"reset button clears progress")
 	for value in app.session.resources.values(): check(value==0,"UI clears each resource")
 	app.session.resources.Tin = 10

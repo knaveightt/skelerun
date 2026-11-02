@@ -11,6 +11,7 @@ var board = []
 var bag = []
 var queue = []
 var piece = {}
+var piece_serial = 0
 var held = ""
 var hold_used = false
 var status = "playing"
@@ -112,6 +113,7 @@ func valid(p: Dictionary = {}, dx: int = 0, dy: int = 0, rotation: int = -1) -> 
 	return true
 
 func spawn(kind: String = ""):
+	piece_serial += 1
 	piece = {"kind":queue.pop_front() if kind == "" else kind,"x":3,"y":-1,"rotation":0}
 	fill_queue()
 	gravity = 0.0
