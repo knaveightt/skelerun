@@ -101,3 +101,10 @@
 ****** Special
 
 ** General TODOs
+*** TODO Fix Scaling on Mobile Devices
+*** TODO Implement Unimplemented Mechanics
+*** TODO Clickable In-App Purchases
+*** TODO Polish Phase
+- [ ] Music
+- [ ] Sound
+- [ ] Visual Flair
