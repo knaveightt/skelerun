@@ -1,33 +1,64 @@
 # SKELERUN — The Sunken Keep
 
-A standalone LÖVE 11.x game prototype: falling blocks power a knight's battle through a five-enemy dungeon. All art and sound are generated in the game; there are no external assets or dependencies.
+A native **Godot 4.7.2** project. This is the active version of the prototype going forward. The original LÖVE source, tests, documentation, and `.love` build are preserved in [`old_project/`](old_project/). Godot ignores that directory during resource imports. The engine-independent design notes remain in `doc/design.org`.
 
-## Play
+## Open and play
 
-Install [LÖVE](https://love2d.org/), then run from this folder:
+Import `project.godot` in Godot **4.7.2**, open the project, and press **F5**. No plugins, .NET, asset downloads, or LÖVE installation are needed. All pixel art and sounds are generated with Godot's native drawing and audio APIs.
+
+With a Godot executable on your command line:
 
 ```sh
-love .
+godot --path .
 ```
 
-You start in your dungeon cell. Press **Enter** or click **Leave for the dungeon** to begin a run. Death or victory brings you back to the cell with your gathered materials. During a run, **R** returns early and keeps your materials.
+The portrait window resizes with a 500×800 logical canvas. The Compatibility renderer supports OpenGL 3.3 hardware.
 
-The large lower board controls the battle above. Clear rows to damage the current enemy and regain ground. Monsters attack on a timer, pushing the knight left. Reach the left edge or fill the board and the run ends. Defeat the Iron Warden to clear the keep.
+## The loop
 
-| Clear | Damage | Ground regained |
+You begin in your dungeon cell. Press **Enter** or click **Leave for the dungeon** to choose a destination. All six dungeons are open. Select with **1–6**, **Up/Down**, or a mouse click, then press **Enter** or click **Begin Run**. **Escape** or **Back to Cell** cancels selection.
+
+Play the large falling-block board to fight enemies in the dungeon strip above it. Runs are **endless until you lose**: each defeated enemy is replaced, with no final boss victory or fixed kill limit. Monster attacks push the knight left, and continuous retreat pressure gradually pulls you left even between enemies. Cleared lines restore ground. Reaching the left edge or filling the board ends the run.
+
+Death or an early return brings you back to your cell with all materials collected. Your board and enemies reset for the next run; your stash and workshop unlock remain.
+
+| Clear | Enemy damage | Ground regained |
 | --- | --- | --- |
 | Single | 1 | 3.5% |
 | Double | 3 | 7% |
 | Triple | 5 | 10.5% |
 | Tetris / critical | 9 | 14% |
 
-The red bar is enemy health; the gold bar below the dungeon is your remaining ground. The small gold meter beside enemy health shows time until the next attack. Defeating an enemy grants a short travel break. The board carries through the entire run.
+The red bar shows enemy health. The gold meter next to it fills toward the next monster attack. The gold bar under the dungeon shows your remaining ground. Defeated enemies grant a short travel break.
 
-## Resources
+The board retains the original seven-piece bag, hold, four visible previews, landing ghost, soft/hard drop, compact wall kicks, 0.45-second lock delay, and combo score bonus. The wall kicks match the prototype rather than full guideline SRS.
 
-Each block removed in a cleared line grants **10 resources**, according to its original piece type. Each row is counted separately, including multi-line clears. Placing a piece without clearing a line gives no resources. The HUD tracks your total stash, including materials from earlier runs. Materials persist after death, victory, returning early, and closing the game.
+## Dungeons (easiest to hardest)
 
-| Piece type | Resource |
+| Destination | Battle-panel theme | Native enemies |
+| --- | --- | --- |
+| Dungeon Halls | Original torchlit stone keep | Crypt Rat, Bone Guard, Mire Slime, Keep Wraith, The Iron Warden |
+| Dungeon Crypts | Underground burial niches, headstones, and drifting mist | Grave Ghoul, Shambling Corpse, Bonewing Bat, Tomb Keeper |
+| Dungeon Lava Pits | Lava channels, stalactites, embers, and scorched rock | Ember Imp, Cinder Hound, Magma Ooze, Furnace Golem |
+| Dungeon Sewers | Corroded pipes, dripping acid, and green runoff | Acid Crawler, Caustic Leech, Bile Toad, Sludge Brute |
+| Dungeon Courtyard | Moonlit outdoor ruins, snow-covered trees, and falling snow | Frost Moth, Rime Wolf, Snow Revenant, Glacier Giant |
+| Dungeon Throne Room | Gold pillars, royal banners, and crimson carpet | Gilded Sentinel, Court Hexer, Crown Mimic, The Fallen Regent |
+
+Each destination opens by showing every native enemy. Later, every fifth encounter can draw a visitor from an easier dungeon. Harder enemies never appear in easier destinations. Each enemy has a distinct name and pixel-art sprite. Fire, acid, ice, and royal themes currently affect appearance and base encounter difficulty; resistance/status systems remain future work.
+
+### Endless pressure and tuning
+
+Later destinations start with stronger enemies, shorter attack intervals, stronger knockback, and faster continuous retreat. Within a run, elapsed active playtime increases retreat speed without a fixed cap. Enemy health also grows with time and encounter count; attack intervals shorten (to a 2.2-second floor), and hits push harder (to a 35% maximum). Pausing freezes the run clock and all pressure. A new run resets its clock, encounter count, enemies, and board.
+
+The header shows destination, active run time, and the continuous retreat multiplier relative to the starting Halls rate. **Foe** counts encounters; **Slain** is an unrestricted total. Returning to the cell records the dungeon, time, enemies slain, and gathered materials.
+
+Balance is deliberately exposed in `scripts/run.gd`: base retreat is `(0.0015 + elapsed_seconds × 0.000025) × (1 + dungeon_index × 0.22)` ground per second. Enemy data and dungeon order live in `scripts/dungeons.gd`. The board and resource rules are identical across destinations. No dungeon progression gates are implemented yet.
+
+## Materials and Blacksmith
+
+Every cleared block grants **10 materials**, according to its original tetromino. Each individual cleared row records its composition, including multi-line clears. Placement alone gives no materials.
+
+| Piece | Material |
 | --- | --- |
 | T-piece | Tin |
 | S-piece / Z-piece | Iron |
@@ -35,40 +66,81 @@ Each block removed in a cleared line grants **10 resources**, according to its o
 | O-piece | Orichalcum |
 | I-piece | Platinum |
 
-A completed row always awards 100 total resources, split by its ten blocks. For example, six J-piece blocks and four I-piece blocks yield 60 Copper and 40 Platinum.
-
-## Dungeon cell and Blacksmith
-
-The cell contains a locked **Blacksmith** workshop. Collect **500 Iron and 500 Copper**, then press **B** or click the workshop card to unlock it. Unlocking spends exactly 500 of each material and is permanent. Both costs must be met; an unsuccessful attempt spends nothing. The restored forge lights up, but weapon and armor refining are reserved for a later update.
-
-Your stash and Blacksmith unlock save automatically in LÖVE's `skelerun` save directory (`progress.dat`). Each run starts with a fresh board and enemies while retaining your stash. The cell shows the last run's result and gathered materials.
+The Blacksmith starts locked. In your cell, press **B** or click its workshop card to spend **500 Iron AND 500 Copper** and permanently unlock it. Failed attempts spend nothing; it cannot charge a second time. Its forge lights up when restored. Weapon and armor refinement are intentionally reserved for later.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
+| Enter / Space in cell | Open dungeon selection |
+| 1–6 / Up / Down in selection | Select destination |
+| Enter / Space in selection | Begin selected run |
+| Escape / Backspace in selection | Return to cell |
+| B in cell | Unlock / inspect Blacksmith |
+| R in cell | Ask to reset all progress (Y confirms; N / Escape cancels) |
+| Mouse | Click cell actions, dungeon cards, Begin Run, or Back to Cell |
 | Left / Right or A / D | Move piece |
 | Down or S | Soft drop |
 | Up / W / X | Rotate clockwise |
 | Z | Rotate counterclockwise |
-| Space | Hard drop |
-| C / Shift | Hold, once per piece |
+| Space during run | Hard drop |
+| C / Shift | Hold, once per placement |
 | P / Escape | Pause / resume |
 | R during run | Return to cell with materials |
 | M | Mute / unmute |
-| Enter / Space in cell | Start dungeon run |
-| B in cell | Unlock / inspect Blacksmith |
-| Mouse in cell | Click workshop or dungeon button |
 
-The board uses a seven-piece bag, four visible previews, a landing ghost, wall kicks, and a short lock delay. Consecutive line-clearing placements earn bonus points. Losing focus pauses play.
+The pause menu has clickable **Continue** and **Abandon Run** options. Click **Abandon Run** or press **R** to return to the cell with your gathered resources.
 
-## Files and checks
+Losing window focus pauses a run. Keyboard repeat is handled by the game, independently of operating-system repeat settings.
 
-- `main.lua`: rendering, pixel art, keyboard input, effects, and synthesized sound.
-- `game.lua`: board rules, piece movement, scoring, and dungeon combat.
-- `session.lua`: cell/run transitions, persistent inventory, workshop unlock, and save format.
-- `conf.lua`: window and LÖVE configuration.
-- `tests/game_test.lua`: deterministic gameplay checks; run with `lua tests/game_test.lua`.
-- `tests/session_test.lua`: cell, inventory, unlock, and persistence checks; run with `lua tests/session_test.lua`.
+## Reset progress
 
-Tuning lives in `game.lua`: enemy health, attack interval, retreat strength, line damage, and gravity. Rotation uses a compact wall-kick system rather than the full guideline SRS tables.
+In the dungeon cell, press **R** to open **Reset all progress?**. Press **Y** or click **Reset All** to confirm; press **N**, **Escape**, or click **Cancel** to keep your progress. The prompt blocks other cell actions. Confirming clears all five resources, the Blacksmith unlock, and the last run summary, then saves the fresh state. This cannot be undone. If saving fails, the previous progress is retained. During a run, **R** still returns to the cell.
+
+## Saved progress
+
+Inventory and the Blacksmith unlock save after line clears, workshop unlocks, returns, focus loss, and normal window closure. The board itself is temporary: opening the game always starts in your cell.
+
+Godot stores `progress.json` in its `user://` directory, normally:
+
+- Linux: `~/.local/share/godot/app_userdata/SKELERUN/`
+- Windows: `%APPDATA%/Godot/app_userdata/SKELERUN/`
+- macOS: `~/Library/Application Support/Godot/app_userdata/SKELERUN/`
+
+On first launch, if no Godot save exists, the game checks for the original `love/skelerun/progress.dat` (or `LOVE/skelerun/progress.dat`) under the operating system's application-data directory. It imports resources and the Blacksmith flag once and leaves the LÖVE save untouched. Invalid inventory values are sanitized. Saves use JSON, never executable code, and replace the previous file only after writing a temporary file. A failed save displays a message.
+
+## Project structure
+
+- `project.godot` — active project configuration and starting scene.
+- `scenes/main.tscn` — entry scene, running the cell and dungeon views.
+- `scripts/main.gd` — input, scene transitions, HUD, effects, and synthesized audio.
+- `scripts/pixel_art.gd` — reusable native drawing helpers and pixel characters.
+- `scripts/run.gd` — board, bag, movement, row composition, scoring, endless combat, and pressure scaling.
+- `scripts/dungeons.gd` — six ordered destinations, native rosters, and easier-dungeon visitors.
+- `scripts/enemy_art.gd` — twenty new themed creature sprites; original five remain in `pixel_art.gd`.
+- `scripts/session.gd` — persistent stash, Blacksmith unlock, save/import, and run lifecycle.
+- `tests/` — native Godot rule and interaction tests.
+- `doc/design.org` — retained game design notes; future concepts are not automatically implemented.
+- `old_project/` — complete archived LÖVE prototype, excluded by `.gdignore`.
+
+Tune rosters and base enemy stats in `scripts/dungeons.gd`; tune time scaling, retreat pressure, line damage, and gravity in `scripts/run.gd`.
+
+## Validation
+
+Validated with **Godot 4.7.2.stable.official.ed1daf0bf**.
+
+```sh
+# 850 deterministic checks: board, endless combat, all six rosters,
+# difficulty ordering, pressure, resources, cell, resets, and persistence.
+godot --headless --path . --script res://tests/run_tests.gd
+
+# Interaction flow, selection/cancel, all 25 sprites and six themes,
+# reset confirmation, focus pause, and resized mouse input.
+# Uses an in-memory session for play and test screenshots in user://.
+godot --path . --script res://tests/smoke_test.gd
+
+# Same interaction checks without a display; screenshot capture is skipped.
+godot --headless --path . --script res://tests/smoke_test.gd
+```
+
+For fully isolated test saves on Linux, prefix commands with `XDG_DATA_HOME=/tmp/skelerun-test-data XDG_CONFIG_HOME=/tmp/skelerun-test-config`. Tests create and remove only `test_progress.json`; they never overwrite `progress.json`.

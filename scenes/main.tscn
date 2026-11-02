@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dluj7fl6jk5xr"]
+
+[ext_resource type="Script" uid="uid://njl1eyiifgoy" path="res://scripts/main.gd" id="1"]
+
+[node name="Skelerun" type="Node2D" unique_id=1293409920]
+script = ExtResource("1")
