@@ -121,7 +121,6 @@ On first launch, if no Godot save exists, the game checks for the original `love
 - `scripts/session.gd` — persistent stash, Blacksmith unlock, save/import, and run lifecycle.
 - `tests/` — native Godot rule and interaction tests.
 - `doc/design.org` — retained game design notes; future concepts are not automatically implemented.
-- `old_project/` — complete archived LÖVE prototype, excluded by `.gdignore`.
 
 Tune rosters and base enemy stats in `scripts/dungeons.gd`; tune time scaling, retreat pressure, line damage, and gravity in `scripts/run.gd`.
 
