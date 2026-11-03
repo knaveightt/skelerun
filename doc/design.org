@@ -41,6 +41,9 @@
 ***** Boss Materials
 ***** Premium Materials
 - Purchase for real currency
+**** Ending Cutscene
+- Skeleton running out of the castle, going out to sea
+- Skelerun 2 - water situation!!
 *** Dungeon Run
 **** Concept
 - This is the core game loop.
